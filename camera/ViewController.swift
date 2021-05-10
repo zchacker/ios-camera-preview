@@ -8,8 +8,11 @@
 import UIKit
 import AVFoundation
 
-class ViewController: UIViewController , AVCaptureVideoDataOutputSampleBufferDelegate {
 
+class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate  {
+
+    var coder: H264Coder?
+    
     @IBOutlet weak var cameraPrview:UIView!
     
     // session
@@ -95,7 +98,13 @@ class ViewController: UIViewController , AVCaptureVideoDataOutputSampleBufferDel
                     session.addInput(input)
                 }
                 
-                session.sessionPreset = .cif352x288
+                let videoOutput = AVCaptureVideoDataOutput()
+                videoOutput.setSampleBufferDelegate(self as AVCaptureVideoDataOutputSampleBufferDelegate, queue: DispatchQueue(label: "sample buffer delegate", attributes: []))
+                if session.canAddOutput(videoOutput) {
+                    session.addOutput(videoOutput)
+                }
+                
+                session.sessionPreset = .cif352x288 //.AVCaptureSessionPreset320x240
                 previewLayer.videoGravity = .resizeAspectFill
                 previewLayer.session = session
                 
@@ -120,9 +129,55 @@ class ViewController: UIViewController , AVCaptureVideoDataOutputSampleBufferDel
        return nil
     }
 
+    func onSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
+        
+        guard let format = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
+        if coder == nil,
+           let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) {
+            
+           //let dimens = formatDescription.dimensions
+            //coder = H264Coder(width: dimens.width, height: dimens.height, callback: { encodedBuffer in
+                //self.decodeCompressedFrame(encodedBuffer)
+            //})
+           
+            coder = H264Coder(width: 352, height: 288, callback: { encodedBuffer in
+                //self.decodeCompressedFrame(encodedBuffer)
+                                
+                
+                guard let blockBuffer = CMSampleBufferGetDataBuffer(encodedBuffer) else { return }
+                
+                var totalLength = Int()
+                var length = Int()
+                var dataPointer: UnsafeMutablePointer<Int8>?
+                let state = CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: &length, totalLengthOut: &totalLength, dataPointerOut: &dataPointer)
+               
+                let data = Data(bytes: dataPointer!, count: length)
+                print("encoded data \(data)")
+                
+//                let imageBuffer = CMSampleBufferGetImageBuffer(encodedBuffer)
+//                CVPixelBufferLockBaseAddress(imageBuffer!, CVPixelBufferLockFlags(rawValue: 0))
+//
+//                let bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer!)
+//                let height      = CVPixelBufferGetHeight(imageBuffer!)
+//                let width       = CVPixelBufferGetWidth(imageBuffer!)
+//                let src_buff    = CVPixelBufferGetBaseAddress(imageBuffer!)
+//                let data = Data(bytes: src_buff!, count: bytesPerRow * height)
+//
+//                print("we get h264 data, height:\(height), width:\(width)")
+            })
+        }
+        coder?.encode(sampleBuffer)
+    }
+    
     // https://mobisoftinfotech.com/resources/mguide/h264-encode-decode-using-videotoolbox/
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        self.onSampleBuffer(sampleBuffer)
         
+//        let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+//        let height      = CVPixelBufferGetHeight(imageBuffer!)
+//        let width       = CVPixelBufferGetWidth(imageBuffer!)
+        
+        //print("we get data, height:\(height), width:\(width)")
     }
 
 }
